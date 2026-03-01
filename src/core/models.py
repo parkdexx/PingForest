@@ -30,9 +30,11 @@ class NodeModel:
         self.alert_interval_minutes: int = 30
         
         # 상태 정보
-        self.status = NodeStatus.UNKNOWN
+        self.ping_status = NodeStatus.UNKNOWN
+        self.port_status = NodeStatus.UNKNOWN
         self.last_check_time: str = ""
-        self.last_response_time_ms: float = 0.0
+        self.ping_response_time_ms: float = 0.0
+        self.port_response_time_ms: float = 0.0
         
         # 트리 구조
         self.parent_id: Optional[str] = None
