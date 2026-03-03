@@ -62,15 +62,15 @@ class DashboardCard(QFrame):
     def update_ui(self):
         self.title_label.setText(self.node.name)
         self.ip_label.setText(self.node.ip_address if self.node.ip_address else "N/A")
-        self.status_ind.set_status(self.node.status)
+        self.status_ind.set_status(self.node.ping_status)
         
-        if self.node.status == NodeStatus.NORMAL:
-            self.status_detail.setText(f"정상 ({self.node.last_response_time_ms:.1f}ms)")
+        if self.node.ping_status == NodeStatus.NORMAL:
+            self.status_detail.setText(f"정상 ({self.node.ping_response_time_ms:.1f}ms)")
             self.status_detail.setStyleSheet("color: #00c73c; font-weight: bold;")
-        elif self.node.status == NodeStatus.WARNING:
-            self.status_detail.setText(f"지연 ({self.node.last_response_time_ms:.1f}ms)")
+        elif self.node.ping_status == NodeStatus.WARNING:
+            self.status_detail.setText(f"지연 ({self.node.ping_response_time_ms:.1f}ms)")
             self.status_detail.setStyleSheet("color: #f4ab2e; font-weight: bold;")
-        elif self.node.status == NodeStatus.DEAD:
+        elif self.node.ping_status == NodeStatus.DEAD:
             self.status_detail.setText("연결 실패")
             self.status_detail.setStyleSheet("color: #f04452; font-weight: bold;")
         else:

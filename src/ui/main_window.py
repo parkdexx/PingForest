@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTreeView, QPushButton, QHeaderView, QFrame, QFormLayout, QLineEdit, QSpinBox, QListWidget, QComboBox, QMenu, QMessageBox, QSplitter
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTreeView, QPushButton, QHeaderView, QFrame, QFormLayout, QLineEdit, QSpinBox, QListWidget, QComboBox, QMenu, QMessageBox, QSplitter, QFileDialog
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QColor, QBrush, QAction
 from PySide6.QtCore import Qt, QModelIndex, Signal, Slot, QTimer, QSettings
 
@@ -78,13 +78,13 @@ class MainWindow(QMainWindow):
         
         # 하단 조작 버튼
         btn_layout = QHBoxLayout()
-        add_group_btn = QPushButton("그룹 추가")
-        add_device_btn = QPushButton("장치 추가")
-        btn_layout.addWidget(add_group_btn)
-        btn_layout.addWidget(add_device_btn)
+        import_btn = QPushButton("트리 가져오기 (Import)")
+        export_btn = QPushButton("트리 내보내기 (Export)")
+        btn_layout.addWidget(import_btn)
+        btn_layout.addWidget(export_btn)
         
-        add_group_btn.clicked.connect(self.on_add_group)
-        add_device_btn.clicked.connect(self.on_add_device)
+        import_btn.clicked.connect(self.on_import_tree)
+        export_btn.clicked.connect(self.on_export_tree)
         
         # 대시보드 버튼 (옵션)
         dashboard_btn = QPushButton("대시보드 보기")
@@ -113,9 +113,6 @@ class MainWindow(QMainWindow):
         # 폼 레이아웃 (선택된 노드의 정보 표시 및 수정)
         form_layout = QFormLayout()
         self.input_name = QLineEdit()
-        self.input_type = QComboBox()
-        self.input_type.addItems(["그룹 (Group)", "장치 (Device)"])
-        self.input_type.setEnabled(False) # 타입 변경은 구현 복잡도로 인해 막아둠
         self.input_ip = QLineEdit()
         self.input_port = QSpinBox()
         self.input_port.setRange(0, 65535)
@@ -143,7 +140,6 @@ class MainWindow(QMainWindow):
         self.status_layout.addLayout(self.port_status_layout)
         
         form_layout.addRow("이름:", self.input_name)
-        form_layout.addRow("유형:", self.input_type)
         form_layout.addRow("IP/Host:", self.input_ip)
         form_layout.addRow("Port (옵션):", self.input_port)
         form_layout.addRow("체크 주기:", self.input_interval)
@@ -251,6 +247,11 @@ class MainWindow(QMainWindow):
             ping_emoji = emoji_map.get(node.ping_status, "⚪")
             port_emoji = emoji_map.get(node.port_status, "⚪") if node.port and node.port > 0 else "➖"
             
+            # IP가 없으면 단순 폴더 역할이므로 상태 표시 X
+            if not node.ip_address:
+                ping_emoji = "📁"
+                port_emoji = "📁"
+            
             overall_ping_status = node.ping_status
             overall_port_status = node.port_status
             
@@ -301,25 +302,17 @@ class MainWindow(QMainWindow):
         if not node: return
         
         self.input_name.setText(node.name)
-        self.input_type.setCurrentIndex(0 if node.type == NodeType.GROUP else 1)
         self.input_ip.setText(node.ip_address)
         self.input_port.setValue(node.port if node.port else 0)
         self.input_interval.setValue(node.check_interval_seconds)
         
         # 상태 텍스트 
-        if node.type == NodeType.GROUP:
-            self.ping_status_text.setText("그룹입니다.")
+        if not node.ip_address:
+            self.ping_status_text.setText("폴더(검사 안함)")
             self.port_status_text.setText("")
             self.ping_status_ind.set_status(NodeStatus.UNKNOWN)
             self.port_status_ind.set_status(NodeStatus.UNKNOWN)
-            self.input_ip.setEnabled(False)
-            self.input_port.setEnabled(False)
-            self.input_interval.setEnabled(False)
         else:
-            self.input_ip.setEnabled(True)
-            self.input_port.setEnabled(True)
-            self.input_interval.setEnabled(True)
-            
             self.ping_status_ind.set_status(node.ping_status)
             if node.ping_status == NodeStatus.NORMAL:
                 self.ping_status_text.setText(f"Ping: 정상 ({node.ping_response_time_ms:.1f}ms)")
@@ -358,35 +351,51 @@ class MainWindow(QMainWindow):
         node.port = self.input_port.value() if self.input_port.value() > 0 else None
         node.check_interval_seconds = self.input_interval.value()
         
-        # 그룹이면 상태 변경 무의미
-        if node.type == NodeType.DEVICE:
-            self.monitor_engine.update_node_worker(node)
+        self.monitor_engine.update_node_worker(node)
             
         self.node_manager.save_data()
         self.populate_tree()
         self.log_list.insertItem(0, "설정이 저장되었습니다.")
 
-    def on_add_group(self):
-        parent_id = self._current_selected_node_id
-        parent = self.node_manager.get_node(parent_id) if parent_id else None
+    def on_add_device(self, force_parent_id=None):
+        parent_id = force_parent_id if force_parent_id is not None else self._current_selected_node_id
+        if parent_id == "": # 최상위 추가 강제
+            parent_id = None
         
-        new_node = NodeModel("새 그룹", NodeType.GROUP)
-        # 만약 선택된 노드가 디바이스여도, 이제는 어디든 자유롭게 들어가도록 부모 변경 강제 코드를 제거함
-        # 디바이스 밑에 그룹도 만들 수 있고 디바이스 밑에 디바이스도 만들 수 있음.
-            
-        self.node_manager.add_node(new_node, parent_id)
-        self.populate_tree()
-        
-    def on_add_device(self):
-        parent_id = self._current_selected_node_id
         parent = self.node_manager.get_node(parent_id) if parent_id else None
         
         new_node = NodeModel("새 장치", NodeType.DEVICE)
-        # 이제 장치 아래 장치 추가 가능. 부모 변경 강제 코드 없음.
             
         self.node_manager.add_node(new_node, parent_id)
         self.monitor_engine.update_node_worker(new_node)
         self.populate_tree()
+
+    def on_import_tree(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "트리 가져오기", "", "JSON 파일 (*.json);;모든 파일 (*)")
+        if file_path:
+            # 먼저 모니터링 엔진 정지
+            self.monitor_engine.stop_monitoring()
+            
+            success = self.node_manager.import_data(file_path)
+            if success:
+                self._current_selected_node_id = None
+                self.populate_tree()
+                # 새 트리에 맞게 모니터링 재개
+                self.monitor_engine.start_monitoring()
+                self.log_list.insertItem(0, f"'{file_path}'에서 트리를 성공적으로 가져왔습니다.")
+            else:
+                QMessageBox.warning(self, "가져오기 실패", "트리 데이터를 가져오는 데 실패했습니다.")
+                self.monitor_engine.start_monitoring() # 실패해도 다시 재개
+                
+    def on_export_tree(self):
+        file_path, _ = QFileDialog.getSaveFileName(self, "트리 내보내기", "pingforest_export.json", "JSON 파일 (*.json);;모든 파일 (*)")
+        if file_path:
+            success = self.node_manager.export_data(file_path)
+            if success:
+                self.log_list.insertItem(0, f"'{file_path}'로 트리를 내보냈습니다.")
+                QMessageBox.information(self, "내보내기 완료", "트리 데이터를 성공적으로 내보냈습니다.")
+            else:
+                QMessageBox.warning(self, "내보내기 실패", "트리 데이터를 내보내는 데 실패했습니다.")
 
     def on_show_dashboard(self):
         from src.ui.dashboard_window import DashboardWindow
@@ -396,7 +405,15 @@ class MainWindow(QMainWindow):
 
     def on_tree_context_menu(self, position):
         index = self.tree_view.indexAt(position)
+        menu = QMenu()
+        
         if not index.isValid():
+            # 빈 공간 우클릭 시
+            add_root_action = QAction("최상위 노드 추가", self)
+            add_root_action.triggered.connect(lambda: self.on_add_device(force_parent_id="")) 
+            # force_parent_id="" (빈 문자열)을 넘겨서 최상위 노드로 추가되게 함 (None을 넘기면 현재 선택된 노드의 자식으로 들어갈 수 있으므로)
+            menu.addAction(add_root_action)
+            menu.exec(self.tree_view.viewport().mapToGlobal(position))
             return
             
         item = self.tree_model.itemFromIndex(index)
@@ -413,10 +430,16 @@ class MainWindow(QMainWindow):
         node = self.node_manager.get_node(node_id)
         if not node: return
         
-        menu = QMenu()
+        add_child_action = QAction(f"'{node.name}'의 하위 노드 추가", self)
+        add_child_action.triggered.connect(lambda: self.on_add_device(force_parent_id=node.id))
+        menu.addAction(add_child_action)
+        
+        menu.addSeparator()
+        
         delete_action = QAction(f"'{node.name}' 삭제", self)
         delete_action.triggered.connect(lambda: self._delete_node_with_confirm(node))
         menu.addAction(delete_action)
+        
         menu.exec(self.tree_view.viewport().mapToGlobal(position))
         
     def _delete_node_with_confirm(self, node: NodeModel):

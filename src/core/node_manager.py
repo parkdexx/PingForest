@@ -79,3 +79,37 @@ class NodeManager:
                     self._register_node_recursive(node)
         except Exception as e:
             print(f"Failed to load tree data: {e}")
+
+    def export_data(self, file_path: str) -> bool:
+        """현재 트리 데이터를 지정된 파일로 내보냅니다."""
+        data = [node.to_dict() for node in self.root_nodes]
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+            return True
+        except Exception as e:
+            print(f"Failed to export tree data: {e}")
+            return False
+
+    def import_data(self, file_path: str) -> bool:
+        """지정된 파일에서 트리 데이터를 가져와 현재 트리를 덮어씁니다."""
+        if not os.path.exists(file_path):
+            return False
+            
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            self.root_nodes = []
+            self._all_nodes = {}
+            for item_data in data:
+                node = NodeModel.from_dict(item_data)
+                self.root_nodes.append(node)
+                self._register_node_recursive(node)
+                
+            # 가져온 데이터를 기본 저장소에도 저장
+            self.save_data()
+            return True
+        except Exception as e:
+            print(f"Failed to import tree data: {e}")
+            return False

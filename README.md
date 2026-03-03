@@ -8,3 +8,11 @@
 * **Connectivity Monitoring:** Periodically checks device status using **ICMP Ping**.
 * **Service Verification:** Monitors specific **TCP Port** availability (HTTP, SSH, DB, etc.).
 * **Status Dashboard:** Provides a clear overview of the network health at each node level.
+
+<br>
+
+### How to start?
+cd venv
+scripts\activate
+python src\main.py
+

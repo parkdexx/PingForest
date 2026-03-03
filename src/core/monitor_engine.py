@@ -17,7 +17,8 @@ class MonitorWorker(QThread):
     def run(self):
         while self.is_running:
             try:
-                if self.node.type != NodeType.DEVICE or not self.node.ip_address:
+                # IP 주소가 없으면 알림/검사 제외 (단순 폴더 역할)
+                if not self.node.ip_address:
                     time.sleep(1)
                     continue
                     

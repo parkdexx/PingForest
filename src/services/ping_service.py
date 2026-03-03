@@ -2,6 +2,7 @@ import subprocess
 import platform
 import re
 from typing import Tuple
+from urllib.parse import urlparse
 
 class PingService:
     @staticmethod
@@ -9,6 +10,14 @@ class PingService:
         """
         Pings an IP address and returns (success: bool, response_time_ms: float)
         """
+        # URL 형태 (http://, https://) 여부 확인 후 호스트명만 추출
+        if ip_address.startswith("http://") or ip_address.startswith("https://"):
+            parsed_url = urlparse(ip_address)
+            ip_address = parsed_url.hostname or ip_address
+            # 포트 번호가 포함되어있는 경우 제거
+            if ":" in ip_address:
+                ip_address = ip_address.split(":")[0]
+                
         param = '-n' if platform.system().lower() == 'windows' else '-c'
         timeout_param = '-w' if platform.system().lower() == 'windows' else '-W'
         

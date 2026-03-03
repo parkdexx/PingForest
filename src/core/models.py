@@ -9,16 +9,15 @@ class NodeStatus(Enum):
     UNKNOWN = "unknown"    # 회색 (검사 전)
 
 class NodeType(Enum):
-    GROUP = "group"        # 하위 노드를 가지는 그룹 (폴더)
-    DEVICE = "device"      # 실제 장비 (IP/Port 할당됨)
+    DEVICE = "device"
 
 class NodeModel:
-    def __init__(self, name: str, node_type: NodeType):
+    def __init__(self, name: str, node_type: NodeType = NodeType.DEVICE):
         self.id = str(uuid.uuid4())
         self.name = name
         self.type = node_type
         
-        # Only used if type is DEVICE
+        # IP/Port 정보 (비워두면 폴더처럼 동작)
         self.ip_address: str = ""
         self.port: Optional[int] = None
         self.check_interval_seconds: int = 60
@@ -57,7 +56,8 @@ class NodeModel:
 
     @classmethod
     def from_dict(cls, data: dict, parent_id: Optional[str] = None):
-        node = cls(data["name"], NodeType(data.get("type", "device")))
+        # 마이그레이션: 기존 group 타입도 device로 강제 변환
+        node = cls(data["name"], NodeType.DEVICE)
         node.id = data.get("id", str(uuid.uuid4()))
         node.ip_address = data.get("ip_address", "")
         node.port = data.get("port")
