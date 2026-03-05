@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTreeView, QPushButton, QHeaderView, QFrame, QFormLayout, QLineEdit, QSpinBox, QListWidget, QComboBox, QMenu, QMessageBox, QSplitter, QFileDialog
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTreeView, QPushButton, QHeaderView, QFrame, QFormLayout, QLineEdit, QSpinBox, QListWidget, QComboBox, QMenu, QMessageBox, QSplitter, QFileDialog, QCheckBox
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QColor, QBrush, QAction
 from PySide6.QtCore import Qt, QModelIndex, Signal, Slot, QTimer, QSettings
 
@@ -26,7 +26,7 @@ class MainWindow(QMainWindow):
         
         # 주기적으로 트리뷰 리프레시를 위해 Qt 타이머 사용 (간단한 구현)
         self.refresh_timer = QTimer(self)
-        self.refresh_timer.timeout.connect(self.populate_tree)
+        self.refresh_timer.timeout.connect(self.update_tree_status_only)
         self.refresh_timer.start(1000)
 
     def on_log_updated(self, msg: str):
@@ -120,6 +120,15 @@ class MainWindow(QMainWindow):
         self.input_interval.setRange(1, 3600)
         self.input_interval.setSuffix(" 초")
         
+        # 대시보드 설정 
+        self.input_send_to_dashboard = QCheckBox()
+        self.input_send_to_dashboard.setChecked(True)
+        self.input_dashboard_color = QLineEdit()
+        self.input_dashboard_color.setPlaceholderText("#ffffff")
+        self.input_dashboard_icon = QLineEdit()
+        self.input_dashboard_icon.setPlaceholderText("🖥️")
+        self.input_dashboard_icon.setMaxLength(5)
+        
         self.status_layout = QVBoxLayout()
         
         self.ping_status_layout = QHBoxLayout()
@@ -143,6 +152,9 @@ class MainWindow(QMainWindow):
         form_layout.addRow("IP/Host:", self.input_ip)
         form_layout.addRow("Port (옵션):", self.input_port)
         form_layout.addRow("체크 주기:", self.input_interval)
+        form_layout.addRow("대시보드 노출:", self.input_send_to_dashboard)
+        form_layout.addRow("대시보드 색상:", self.input_dashboard_color)
+        form_layout.addRow("대시보드 아이콘:", self.input_dashboard_icon)
         form_layout.addRow("현재 상태:", self.status_layout)
         
         self.save_btn = QPushButton("저장")
@@ -213,6 +225,52 @@ class MainWindow(QMainWindow):
         # Restore Tree Selection 
         if self._current_selected_node_id:
             self._restore_selection()
+            
+    def update_tree_status_only(self):
+        # 전체 갱신(populate_tree)으로 인한 UI 깜빡임을 방지, 상태만 갱신
+        self._update_node_status_recursive(self.tree_model.invisibleRootItem())
+
+    def _update_node_status_recursive(self, parent_item: QStandardItem):
+        for row in range(parent_item.rowCount()):
+            name_item = parent_item.child(row, 0)
+            ping_item = parent_item.child(row, 1)
+            port_item = parent_item.child(row, 2)
+            
+            node_id = name_item.data(Qt.UserRole)
+            if node_id:
+                node = self.node_manager.get_node(node_id)
+                if node and getattr(node, 'type', None) == NodeType.DEVICE:
+                    emoji_map = {
+                        NodeStatus.NORMAL: "🟢",
+                        NodeStatus.WARNING: "🟡",
+                        NodeStatus.DEAD: "🔴",
+                        NodeStatus.UNKNOWN: "⚪"
+                    }
+                    color_map = {
+                        NodeStatus.NORMAL: QColor("#00c73c"),
+                        NodeStatus.WARNING: QColor("#f4ab2e"),
+                        NodeStatus.DEAD: QColor("#f04452"),
+                        NodeStatus.UNKNOWN: QColor("#b0b8c1")
+                    }
+                    
+                    if not node.ip_address:
+                        ping_item.setText("📁")
+                        port_item.setText("📁")
+                        ping_item.setForeground(QBrush(QColor("#b0b8c1")))
+                        port_item.setForeground(QBrush(QColor("#b0b8c1")))
+                    else:
+                        ping_item.setText(emoji_map.get(node.ping_status, "⚪"))
+                        ping_item.setForeground(QBrush(color_map.get(node.ping_status, QColor("#b0b8c1"))))
+                        
+                        if getattr(node, 'port', None) and node.port > 0:
+                            port_item.setText(emoji_map.get(getattr(node, 'port_status', NodeStatus.UNKNOWN), "⚪"))
+                            port_item.setForeground(QBrush(color_map.get(getattr(node, 'port_status', NodeStatus.UNKNOWN), QColor("#b0b8c1"))))
+                        else:
+                            port_item.setText("➖")
+                            port_item.setForeground(QBrush(QColor("#b0b8c1")))
+
+            # 자식 노드 재귀 갱신
+            self._update_node_status_recursive(name_item)
             
     def _restore_selection(self):
         match_list = self.tree_model.match(
@@ -306,6 +364,10 @@ class MainWindow(QMainWindow):
         self.input_port.setValue(node.port if node.port else 0)
         self.input_interval.setValue(node.check_interval_seconds)
         
+        self.input_send_to_dashboard.setChecked(getattr(node, 'send_to_dashboard', True))
+        self.input_dashboard_color.setText(getattr(node, 'dashboard_color', '#ffffff'))
+        self.input_dashboard_icon.setText(getattr(node, 'dashboard_icon', '🖥️'))
+        
         # 상태 텍스트 
         if not node.ip_address:
             self.ping_status_text.setText("폴더(검사 안함)")
@@ -350,6 +412,10 @@ class MainWindow(QMainWindow):
         node.ip_address = self.input_ip.text()
         node.port = self.input_port.value() if self.input_port.value() > 0 else None
         node.check_interval_seconds = self.input_interval.value()
+        
+        node.send_to_dashboard = self.input_send_to_dashboard.isChecked()
+        node.dashboard_color = self.input_dashboard_color.text() or "#ffffff"
+        node.dashboard_icon = self.input_dashboard_icon.text() or "🖥️"
         
         self.monitor_engine.update_node_worker(node)
             
@@ -424,6 +490,13 @@ class MainWindow(QMainWindow):
             sibling = index.siblingAtColumn(0)
             item = self.tree_model.itemFromIndex(sibling)
             node_id = item.data(Qt.UserRole) if item else None
+            if sibling.isValid():
+                self.tree_view.setCurrentIndex(sibling)
+        else:
+            self.tree_view.setCurrentIndex(index)
+            
+        if node_id:
+            self._current_selected_node_id = node_id
             
         if not node_id: return
         

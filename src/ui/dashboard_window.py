@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QScrollArea, QFrame
 from PySide6.QtCore import Qt, QTimer
+from datetime import datetime
 from src.core.node_manager import NodeManager
 from src.core.models import NodeStatus, NodeType
 from src.ui.styles import TOSS_STYLE_QSS
@@ -10,33 +11,35 @@ class DashboardCard(QFrame):
         super().__init__()
         self.node = node
         self.setObjectName("DashboardCard")
-        self.setStyleSheet("""
-            #DashboardCard {
+        self.setStyleSheet(f"""
+            #DashboardCard {{
                 background-color: white;
                 border: 1px solid #e5e8eb;
+                border-top: 4px solid {node.dashboard_color};
                 border-radius: 16px;
                 padding: 20px;
-            }
-            #DashboardCard:hover {
+            }}
+            #DashboardCard:hover {{
                 border: 1px solid #3182f6;
+                border-top: 4px solid #3182f6;
                 background-color: #f9fafb;
-            }
-            .CardTitle {
+            }}
+            .CardTitle {{
                 font-size: 16px;
                 font-weight: bold;
                 color: #191f28;
-            }
-            .CardSub {
+            }}
+            .CardSub {{
                 font-size: 13px;
                 color: #8b95a1;
-            }
+            }}
         """)
         
         layout = QVBoxLayout(self)
         
         # 상단 (이름 및 상태 등)
         top_layout = QHBoxLayout()
-        self.title_label = QLabel(node.name)
+        self.title_label = QLabel(f"{node.dashboard_icon} {node.name}")
         self.title_label.setProperty("class", "CardTitle")
         self.status_ind = StatusIndicator(20)
         
@@ -50,32 +53,53 @@ class DashboardCard(QFrame):
         self.ip_label = QLabel(node.ip_address if node.ip_address else "N/A")
         self.ip_label.setProperty("class", "CardSub")
         
-        self.status_detail = QLabel("대기중")
+        self.status_detail = QLabel("Ping: 대기중")
         self.status_detail.setProperty("class", "CardSub")
+        
+        self.port_status_detail = QLabel("Port: 미사용")
+        self.port_status_detail.setProperty("class", "CardSub")
         
         layout.addStretch()
         layout.addWidget(self.ip_label)
         layout.addWidget(self.status_detail)
+        layout.addWidget(self.port_status_detail)
         
         self.update_ui()
         
     def update_ui(self):
-        self.title_label.setText(self.node.name)
+        self.title_label.setText(f"{self.node.dashboard_icon} {self.node.name}")
         self.ip_label.setText(self.node.ip_address if self.node.ip_address else "N/A")
         self.status_ind.set_status(self.node.ping_status)
         
         if self.node.ping_status == NodeStatus.NORMAL:
-            self.status_detail.setText(f"정상 ({self.node.ping_response_time_ms:.1f}ms)")
+            self.status_detail.setText(f"Ping: 정상 ({self.node.ping_response_time_ms:.1f}ms)")
             self.status_detail.setStyleSheet("color: #00c73c; font-weight: bold;")
         elif self.node.ping_status == NodeStatus.WARNING:
-            self.status_detail.setText(f"지연 ({self.node.ping_response_time_ms:.1f}ms)")
+            self.status_detail.setText(f"Ping: 지연 ({self.node.ping_response_time_ms:.1f}ms)")
             self.status_detail.setStyleSheet("color: #f4ab2e; font-weight: bold;")
         elif self.node.ping_status == NodeStatus.DEAD:
-            self.status_detail.setText("연결 실패")
+            self.status_detail.setText("Ping: 연결 실패")
             self.status_detail.setStyleSheet("color: #f04452; font-weight: bold;")
         else:
-            self.status_detail.setText("대기중")
+            self.status_detail.setText("Ping: 대기중")
             self.status_detail.setStyleSheet("color: #8b95a1;")
+
+        if hasattr(self.node, 'port') and self.node.port and self.node.port > 0:
+            if self.node.port_status == NodeStatus.NORMAL:
+                self.port_status_detail.setText(f"Port: 정상 ({self.node.port_response_time_ms:.1f}ms)")
+                self.port_status_detail.setStyleSheet("color: #00c73c; font-weight: bold;")
+            elif self.node.port_status == NodeStatus.WARNING:
+                self.port_status_detail.setText(f"Port: 지연 ({self.node.port_response_time_ms:.1f}ms)")
+                self.port_status_detail.setStyleSheet("color: #f4ab2e; font-weight: bold;")
+            elif self.node.port_status == NodeStatus.DEAD:
+                self.port_status_detail.setText("Port: 연결 실패")
+                self.port_status_detail.setStyleSheet("color: #f04452; font-weight: bold;")
+            else:
+                self.port_status_detail.setText("Port: 대기중")
+                self.port_status_detail.setStyleSheet("color: #8b95a1;")
+        else:
+            self.port_status_detail.setText("Port: 미사용")
+            self.port_status_detail.setStyleSheet("color: #8b95a1;")
 
 class DashboardWindow(QWidget):
     def __init__(self, node_manager: NodeManager):
@@ -99,14 +123,14 @@ class DashboardWindow(QWidget):
         
         # Header
         header_layout = QHBoxLayout()
-        title = QLabel("모니터링 대시보드")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #191f28;")
-        header_layout.addWidget(title)
+        self.header_title = QLabel(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        self.header_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #191f28;")
+        header_layout.addWidget(self.header_title)
         header_layout.addStretch()
         
-        fullscreen_btn = QPushButton("전체화면 전환")
-        fullscreen_btn.clicked.connect(self.toggle_fullscreen)
-        header_layout.addWidget(fullscreen_btn)
+        self.fullscreen_btn = QPushButton("전체화면 전환")
+        self.fullscreen_btn.clicked.connect(self.toggle_fullscreen)
+        header_layout.addWidget(self.fullscreen_btn)
         
         layout.addLayout(header_layout)
         
@@ -131,7 +155,7 @@ class DashboardWindow(QWidget):
             self.grid_layout.itemAt(i).widget().setParent(None)
         self.cards.clear()
             
-        devices = self.node_manager.get_all_devices()
+        devices = [d for d in self.node_manager.get_all_devices() if getattr(d, 'send_to_dashboard', True)]
         
         # 3 columns layout
         cols = 3
@@ -143,17 +167,23 @@ class DashboardWindow(QWidget):
             self.cards.append(card)
 
     def refresh_cards(self):
-        # In a real scenario, we might just update the existing cards instead of repopulating.
-        # But for simplicity, if length changes, repopulate. Otherwise, update.
-        devices = self.node_manager.get_all_devices()
+        self.header_title.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        
+        devices = [d for d in self.node_manager.get_all_devices() if getattr(d, 'send_to_dashboard', True)]
+        # 카드의 개수나 노드 순서가 바뀌었으면 다시 렌더링
         if len(devices) != len(self.cards):
             self.populate_grid()
         else:
-            for card in self.cards:
+            for i, card in enumerate(self.cards):
+                if card.node.id != devices[i].id:
+                    self.populate_grid()
+                    return
                 card.update_ui()
                 
     def toggle_fullscreen(self):
         if self.isFullScreen():
             self.showNormal()
+            self.fullscreen_btn.setText("전체화면 전환")
         else:
             self.showFullScreen()
+            self.fullscreen_btn.setText("창모드 전환")

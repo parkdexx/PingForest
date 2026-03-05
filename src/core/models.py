@@ -35,6 +35,11 @@ class NodeModel:
         self.ping_response_time_ms: float = 0.0
         self.port_response_time_ms: float = 0.0
         
+        # 대시보드 설정
+        self.send_to_dashboard: bool = True
+        self.dashboard_color: str = "#ffffff"
+        self.dashboard_icon: str = "🖥️"
+        
         # 트리 구조
         self.parent_id: Optional[str] = None
         self.children: List['NodeModel'] = []
@@ -51,6 +56,9 @@ class NodeModel:
             "alert_threshold_count": self.alert_threshold_count,
             "alert_emails": self.alert_emails,
             "alert_interval_minutes": self.alert_interval_minutes,
+            "send_to_dashboard": self.send_to_dashboard,
+            "dashboard_color": self.dashboard_color,
+            "dashboard_icon": self.dashboard_icon,
             "children": [child.to_dict() for child in self.children]
         }
 
@@ -66,6 +74,9 @@ class NodeModel:
         node.alert_threshold_count = data.get("alert_threshold_count", 3)
         node.alert_emails = data.get("alert_emails", [])
         node.alert_interval_minutes = data.get("alert_interval_minutes", 30)
+        node.send_to_dashboard = data.get("send_to_dashboard", True)
+        node.dashboard_color = data.get("dashboard_color", "#ffffff")
+        node.dashboard_icon = data.get("dashboard_icon", "🖥️")
         node.parent_id = parent_id
         
         for child_data in data.get("children", []):
