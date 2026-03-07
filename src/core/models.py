@@ -38,7 +38,10 @@ class NodeModel:
         # 대시보드 설정
         self.send_to_dashboard: bool = True
         self.dashboard_color: str = "#ffffff"
-        self.dashboard_icon: str = "🖥️"
+        self.dashboard_icon: str = "fa5s.desktop"
+        
+        # 런타임 로그 (휘발성)
+        self.logs: List[str] = []
         
         # 트리 구조
         self.parent_id: Optional[str] = None
@@ -76,7 +79,7 @@ class NodeModel:
         node.alert_interval_minutes = data.get("alert_interval_minutes", 30)
         node.send_to_dashboard = data.get("send_to_dashboard", True)
         node.dashboard_color = data.get("dashboard_color", "#ffffff")
-        node.dashboard_icon = data.get("dashboard_icon", "🖥️")
+        node.dashboard_icon = data.get("dashboard_icon", "fa5s.desktop")
         node.parent_id = parent_id
         
         for child_data in data.get("children", []):

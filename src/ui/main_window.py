@@ -1,5 +1,7 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTreeView, QPushButton, QHeaderView, QFrame, QFormLayout, QLineEdit, QSpinBox, QListWidget, QComboBox, QMenu, QMessageBox, QSplitter, QFileDialog, QCheckBox
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTreeView, QPushButton, QHeaderView, QFrame, QFormLayout, QLineEdit, QSpinBox, QListWidget, QComboBox, QMenu, QMessageBox, QSplitter, QFileDialog, QCheckBox, QColorDialog, QDialog, QGridLayout, QToolButton
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QColor, QBrush, QAction
+import qtawesome as qta
+from datetime import datetime
 from PySide6.QtCore import Qt, QModelIndex, Signal, Slot, QTimer, QSettings
 
 from src.core.node_manager import NodeManager
@@ -29,11 +31,11 @@ class MainWindow(QMainWindow):
         self.refresh_timer.timeout.connect(self.update_tree_status_only)
         self.refresh_timer.start(1000)
 
-    def on_log_updated(self, msg: str):
-        self.log_list.insertItem(0, msg)
-        # Limit to 100 entries to prevent memory leak
-        if self.log_list.count() > 100:
-            self.log_list.takeItem(100)
+    def on_log_updated(self, node_id: str, msg: str):
+        if self._current_selected_node_id == node_id:
+            self.log_list.insertItem(0, msg)
+            if self.log_list.count() > 1000:
+                self.log_list.takeItem(1000)
 
     def init_ui(self):
         central_widget = QWidget()
@@ -120,14 +122,48 @@ class MainWindow(QMainWindow):
         self.input_interval.setRange(1, 3600)
         self.input_interval.setSuffix(" 초")
         
-        # 대시보드 설정 
+        # 대시보드 옵션 Layout
         self.input_send_to_dashboard = QCheckBox()
         self.input_send_to_dashboard.setChecked(True)
+        
+        # 색상
+        color_layout = QHBoxLayout()
+        self.color_preview = QLabel()
+        self.color_preview.setFixedSize(24, 24)
+        self.color_preview.setStyleSheet("background-color: #ffffff; border: 1px solid #d1d6db; border-radius: 4px;")
+        
         self.input_dashboard_color = QLineEdit()
         self.input_dashboard_color.setPlaceholderText("#ffffff")
+        self.input_dashboard_color.setFixedWidth(120)
+        
+        self.btn_dashboard_color = QPushButton("색상 선택")
+        self.btn_dashboard_color.clicked.connect(self.on_select_color)
+        
+        color_layout.addWidget(self.color_preview)
+        color_layout.addWidget(self.input_dashboard_color)
+        color_layout.addWidget(self.btn_dashboard_color)
+        color_layout.addStretch()
+
+        # 아이콘
+        icon_layout = QHBoxLayout()
+        self.icon_preview = QLabel()
+        self.icon_preview.setFixedSize(24, 24)
+        try:
+            self.icon_preview.setPixmap(qta.icon("fa5s.desktop").pixmap(24, 24))
+        except Exception:
+            pass
+            
         self.input_dashboard_icon = QLineEdit()
-        self.input_dashboard_icon.setPlaceholderText("🖥️")
-        self.input_dashboard_icon.setMaxLength(5)
+        self.input_dashboard_icon.setPlaceholderText("fa5s.desktop")
+        self.input_dashboard_icon.setFixedWidth(120)
+        
+        self.btn_dashboard_icon = QPushButton("아이콘 선택")
+        self.btn_dashboard_icon.clicked.connect(self.on_select_icon)
+        
+        icon_layout.addWidget(self.icon_preview)
+        icon_layout.addWidget(self.input_dashboard_icon)
+        icon_layout.addWidget(self.btn_dashboard_icon)
+        icon_layout.addStretch()
         
         self.status_layout = QVBoxLayout()
         
@@ -153,8 +189,8 @@ class MainWindow(QMainWindow):
         form_layout.addRow("Port (옵션):", self.input_port)
         form_layout.addRow("체크 주기:", self.input_interval)
         form_layout.addRow("대시보드 노출:", self.input_send_to_dashboard)
-        form_layout.addRow("대시보드 색상:", self.input_dashboard_color)
-        form_layout.addRow("대시보드 아이콘:", self.input_dashboard_icon)
+        form_layout.addRow("대시보드 색상:", color_layout)
+        form_layout.addRow("대시보드 아이콘:", icon_layout)
         form_layout.addRow("현재 상태:", self.status_layout)
         
         self.save_btn = QPushButton("저장")
@@ -171,11 +207,21 @@ class MainWindow(QMainWindow):
         self.log_panel = QFrame()
         self.log_panel.setObjectName("logPanel")
         log_layout = QVBoxLayout(self.log_panel)
+        
+        log_header_layout = QHBoxLayout()
         self.log_title = QLabel("네트워크 연결 로그")
         self.log_title.setProperty("class", "PanelTitle")
         
+        self.btn_export_logs = QPushButton("내보내기")
+        self.btn_export_logs.setFixedWidth(80)
+        self.btn_export_logs.clicked.connect(self.on_export_logs)
+        
+        log_header_layout.addWidget(self.log_title)
+        log_header_layout.addStretch()
+        log_header_layout.addWidget(self.btn_export_logs)
+        
         self.log_list = QListWidget()
-        log_layout.addWidget(self.log_title)
+        log_layout.addLayout(log_header_layout)
         log_layout.addWidget(self.log_list, stretch=1)
         
         right_layout.addWidget(self.log_panel, stretch=1)
@@ -225,6 +271,15 @@ class MainWindow(QMainWindow):
         # Restore Tree Selection 
         if self._current_selected_node_id:
             self._restore_selection()
+        elif self.tree_model.rowCount() > 0:
+            # 기본으로 첫 번째 노드 포커싱 주고 상세 정보 로드
+            first_idx = self.tree_model.index(0, 0)
+            if first_idx.isValid():
+                self.tree_view.setCurrentIndex(first_idx)
+                node_id = first_idx.data(Qt.UserRole)
+                if node_id:
+                    self._current_selected_node_id = node_id
+                    self._load_node_details(node_id)
             
     def update_tree_status_only(self):
         # 전체 갱신(populate_tree)으로 인한 UI 깜빡임을 방지, 상태만 갱신
@@ -365,8 +420,17 @@ class MainWindow(QMainWindow):
         self.input_interval.setValue(node.check_interval_seconds)
         
         self.input_send_to_dashboard.setChecked(getattr(node, 'send_to_dashboard', True))
-        self.input_dashboard_color.setText(getattr(node, 'dashboard_color', '#ffffff'))
-        self.input_dashboard_icon.setText(getattr(node, 'dashboard_icon', '🖥️'))
+        
+        node_color = getattr(node, 'dashboard_color', '#ffffff')
+        self.input_dashboard_color.setText(node_color)
+        self.color_preview.setStyleSheet(f"background-color: {node_color}; border: 1px solid #d1d6db; border-radius: 4px;")
+        
+        node_icon = getattr(node, 'dashboard_icon', 'fa5s.desktop')
+        self.input_dashboard_icon.setText(node_icon)
+        try:
+            self.icon_preview.setPixmap(qta.icon(node_icon).pixmap(24, 24))
+        except Exception:
+            self.icon_preview.setPixmap(qta.icon("fa5s.desktop").pixmap(24, 24))
         
         # 상태 텍스트 
         if not node.ip_address:
@@ -399,9 +463,10 @@ class MainWindow(QMainWindow):
                 self.port_status_ind.set_status(NodeStatus.UNKNOWN)
                 self.port_status_text.setText("Port: 미사용")
         
-        # 로그 패널 갱신 시뮬레이션 (임시)
+        # 로그 패널 갱신
         self.log_list.clear()
-        self.log_list.addItem(f"[{node.last_check_time}] {node.name} 모니터링 상세 정보 갱신.")
+        for msg in reversed(node.logs):
+            self.log_list.addItem(msg)
 
     def on_save_clicked(self):
         if not self._current_selected_node_id: return
@@ -415,12 +480,18 @@ class MainWindow(QMainWindow):
         
         node.send_to_dashboard = self.input_send_to_dashboard.isChecked()
         node.dashboard_color = self.input_dashboard_color.text() or "#ffffff"
-        node.dashboard_icon = self.input_dashboard_icon.text() or "🖥️"
+        node.dashboard_icon = self.input_dashboard_icon.text() or "fa5s.desktop"
         
         self.monitor_engine.update_node_worker(node)
             
         self.node_manager.save_data()
         self.populate_tree()
+        
+        if hasattr(self, 'dashboard_window') and self.dashboard_window.isVisible():
+            for card in self.dashboard_window.cards:
+                if card.node.id == node.id:
+                    card.update_ui()
+                    
         self.log_list.insertItem(0, "설정이 저장되었습니다.")
 
     def on_add_device(self, force_parent_id=None):
@@ -463,11 +534,75 @@ class MainWindow(QMainWindow):
             else:
                 QMessageBox.warning(self, "내보내기 실패", "트리 데이터를 내보내는 데 실패했습니다.")
 
+    def on_export_logs(self):
+        if not self._current_selected_node_id:
+            QMessageBox.warning(self, "내보내기 실패", "선택된 노드가 없습니다.")
+            return
+            
+        node = self.node_manager.get_node(self._current_selected_node_id)
+        if not node:
+            return
+            
+        default_file_name = f"{node.name}_{datetime.now().strftime('%Y_%m_%d')}.txt"
+        file_path, _ = QFileDialog.getSaveFileName(self, "로그 내보내기", default_file_name, "텍스트 파일 (*.txt);;모든 파일 (*)")
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    for line in node.logs:
+                        f.write(line + "\\n")
+                QMessageBox.information(self, "내보내기 완료", f"로그 내보내기를 완료했습니다.\\n{file_path}")
+            except Exception as e:
+                QMessageBox.warning(self, "내보내기 실패", f"로그 저장 중 오류가 발생했습니다: {e}")
+
     def on_show_dashboard(self):
         from src.ui.dashboard_window import DashboardWindow
         if not hasattr(self, 'dashboard_window') or not self.dashboard_window.isVisible():
             self.dashboard_window = DashboardWindow(self.node_manager)
             self.dashboard_window.show()
+
+    def on_select_color(self):
+        current_color = self.input_dashboard_color.text() or "#ffffff"
+        color = QColorDialog.getColor(QColor(current_color), self, "대시보드 타일 색상 선택")
+        if color.isValid():
+            self.input_dashboard_color.setText(color.name())
+            self.color_preview.setStyleSheet(f"background-color: {color.name()}; border: 1px solid #d1d6db; border-radius: 4px;")
+
+    def on_select_icon(self):
+        icons = [
+            "fa5s.desktop", "fa5s.server", "fa5s.laptop", "fa5s.database", "fa5s.network-wired",
+            "fa5s.hdd", "fa5s.microchip", "fa5s.memory", "fa5s.cloud", "fa5s.wifi",
+            "fa5s.globe", "fa5s.sitemap", "fa5s.shield-alt", "fa5s.lock", "fa5s.bug",
+            "fa5s.cogs", "fa5s.terminal", "fa5s.power-off", "fa5s.plug", "fa5s.battery-full",
+            "fa5s.broadcast-tower", "fa5s.satellite-dish", "fa5s.layer-group", "fa5s.boxes",
+            "fa5s.project-diagram", "fa5s.thermometer-half", "fa5s.tachometer-alt", "fa5s.fan", "fa5s.bolt", "fa5s.gamepad"
+        ]
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("대시보드 아이콘 선택")
+        layout = QGridLayout(dialog)
+        
+        for i, icon_name in enumerate(icons):
+            btn = QToolButton()
+            btn.setIcon(qta.icon(icon_name))
+            btn.setIconSize(qta.QtCore.QSize(32, 32))
+            btn.setFixedSize(48, 48)
+            btn.setToolTip(icon_name)
+            
+            def create_set_icon_func(name):
+                def set_icon(checked=False):
+                    self.input_dashboard_icon.setText(name)
+                    try:
+                        self.icon_preview.setPixmap(qta.icon(name).pixmap(24, 24))
+                    except Exception:
+                        pass
+                    dialog.accept()
+                return set_icon
+                
+            btn.clicked.connect(create_set_icon_func(icon_name))
+            layout.addWidget(btn, i // 6, i % 6)
+            
+        dialog.exec()
 
     def on_tree_context_menu(self, position):
         index = self.tree_view.indexAt(position)

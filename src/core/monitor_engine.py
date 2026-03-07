@@ -53,7 +53,7 @@ class MonitorWorker(QThread):
         self.is_running = False
 
 class MonitorEngine(QObject):
-    log_updated = Signal(str)
+    log_updated = Signal(str, str) # node_id, log_msg
 
     def __init__(self, node_manager):
         super().__init__()
@@ -85,13 +85,18 @@ class MonitorEngine(QObject):
             node.last_check_time = checked_at
             
             from src.core.logger import global_logger
-            log_msg = f"Ping: {ping_status.name} ({ping_time:.1f}ms)"
+            log_core_msg = f"Ping: {ping_status.name} ({ping_time:.1f}ms)"
             if node.port and node.port > 0:
-                log_msg += f", Port({node.port}): {port_status.name} ({port_time:.1f}ms)"
-            global_logger.log_connection_status(node.name, log_msg)
+                log_core_msg += f", Port({node.port}): {port_status.name} ({port_time:.1f}ms)"
+            global_logger.log_connection_status(node.name, log_core_msg)
+            
+            log_entry = f"[{checked_at}] {node.name} | {log_core_msg}"
+            node.logs.append(log_entry)
+            if len(node.logs) > 1000:
+                node.logs.pop(0)
             
             # Emit to UI
-            self.log_updated.emit(f"[{checked_at}] {node.name} | {log_msg}")
+            self.log_updated.emit(node.id, log_entry)
 
     def stop_monitoring(self):
         for worker in self.workers.values():

@@ -4,13 +4,14 @@ from datetime import datetime
 from src.core.node_manager import NodeManager
 from src.core.models import NodeStatus, NodeType
 from src.ui.styles import TOSS_STYLE_QSS
-from src.ui.components.status_indicator import StatusIndicator
+import qtawesome as qta
 
 class DashboardCard(QFrame):
     def __init__(self, node):
         super().__init__()
         self.node = node
         self.setObjectName("DashboardCard")
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setStyleSheet(f"""
             #DashboardCard {{
                 background-color: white;
@@ -39,13 +40,18 @@ class DashboardCard(QFrame):
         
         # 상단 (이름 및 상태 등)
         top_layout = QHBoxLayout()
-        self.title_label = QLabel(f"{node.dashboard_icon} {node.name}")
+        self.icon_label = QLabel()
+        try:
+            self.icon_label.setPixmap(qta.icon(node.dashboard_icon).pixmap(24, 24))
+        except Exception:
+            self.icon_label.setPixmap(qta.icon("fa5s.desktop").pixmap(24, 24))
+            
+        self.title_label = QLabel(node.name)
         self.title_label.setProperty("class", "CardTitle")
-        self.status_ind = StatusIndicator(20)
         
+        top_layout.addWidget(self.icon_label)
         top_layout.addWidget(self.title_label)
         top_layout.addStretch()
-        top_layout.addWidget(self.status_ind)
         
         layout.addLayout(top_layout)
         
@@ -67,9 +73,43 @@ class DashboardCard(QFrame):
         self.update_ui()
         
     def update_ui(self):
-        self.title_label.setText(f"{self.node.dashboard_icon} {self.node.name}")
+        # Update stylesheet dynamically for color changes
+        self.setStyleSheet(f"""
+            #DashboardCard {{
+                background-color: white;
+                border: 1px solid #e5e8eb;
+                border-top: 4px solid {getattr(self.node, 'dashboard_color', '#ffffff')};
+                border-radius: 16px;
+                padding: 20px;
+            }}
+            #DashboardCard:hover {{
+                border: 1px solid #3182f6;
+                border-top: 4px solid #3182f6;
+                background-color: #f9fafb;
+            }}
+            .CardTitle {{
+                font-size: 16px;
+                font-weight: bold;
+                color: #191f28;
+            }}
+            .CardSub {{
+                font-size: 13px;
+                color: #8b95a1;
+            }}
+        """)
+        
+        # Qt stylesheet refresh trigger
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+        
+        try:
+            self.icon_label.setPixmap(qta.icon(self.node.dashboard_icon).pixmap(24, 24))
+        except Exception:
+            self.icon_label.setPixmap(qta.icon("fa5s.desktop").pixmap(24, 24))
+            
+        self.title_label.setText(self.node.name)
         self.ip_label.setText(self.node.ip_address if self.node.ip_address else "N/A")
-        self.status_ind.set_status(self.node.ping_status)
         
         if self.node.ping_status == NodeStatus.NORMAL:
             self.status_detail.setText(f"Ping: 정상 ({self.node.ping_response_time_ms:.1f}ms)")
