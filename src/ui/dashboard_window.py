@@ -11,7 +11,9 @@ class DashboardCard(QFrame):
         super().__init__()
         self.node = node
         self.setObjectName("DashboardCard")
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        # Removing WA_TranslucentBackground as it can conflict with QSS border updates on Windows
+        self._last_dashboard_color = getattr(self.node, 'dashboard_color', '#ffffff')
+        self._current_dashboard_icon = getattr(self.node, 'dashboard_icon', 'fa5s.desktop')
         self.setStyleSheet(f"""
             #DashboardCard {{
                 background-color: white;
@@ -42,9 +44,12 @@ class DashboardCard(QFrame):
         top_layout = QHBoxLayout()
         self.icon_label = QLabel()
         try:
-            self.icon_label.setPixmap(qta.icon(node.dashboard_icon).pixmap(24, 24))
+            ic_name = getattr(self.node, 'dashboard_icon', 'fa5s.desktop')
+            ic_color = getattr(self.node, 'dashboard_color', '#333d4b')
+            if ic_color == '#ffffff': ic_color = '#333d4b' # 흰색 배경에 흰색 아이콘 방지
+            self.icon_label.setPixmap(qta.icon(ic_name, color=ic_color).pixmap(24, 24))
         except Exception:
-            self.icon_label.setPixmap(qta.icon("fa5s.desktop").pixmap(24, 24))
+            self.icon_label.setPixmap(qta.icon("fa5s.desktop", color="#333d4b").pixmap(24, 24))
             
         self.title_label = QLabel(node.name)
         self.title_label.setProperty("class", "CardTitle")
@@ -73,40 +78,45 @@ class DashboardCard(QFrame):
         self.update_ui()
         
     def update_ui(self):
-        # Update stylesheet dynamically for color changes
-        self.setStyleSheet(f"""
-            #DashboardCard {{
-                background-color: white;
-                border: 1px solid #e5e8eb;
-                border-top: 4px solid {getattr(self.node, 'dashboard_color', '#ffffff')};
-                border-radius: 16px;
-                padding: 20px;
-            }}
-            #DashboardCard:hover {{
-                border: 1px solid #3182f6;
-                border-top: 4px solid #3182f6;
-                background-color: #f9fafb;
-            }}
-            .CardTitle {{
-                font-size: 16px;
-                font-weight: bold;
-                color: #191f28;
-            }}
-            .CardSub {{
-                font-size: 13px;
-                color: #8b95a1;
-            }}
-        """)
+        new_color = getattr(self.node, 'dashboard_color', '#ffffff')
+        new_icon = getattr(self.node, 'dashboard_icon', 'fa5s.desktop')
         
-        # Qt stylesheet refresh trigger
-        self.style().unpolish(self)
-        self.style().polish(self)
-        self.update()
+        # Only update the stylesheet if the color has changed to prevent UI glitches and save CPU
+        if self._last_dashboard_color != new_color:
+            self._last_dashboard_color = new_color
+            self.setStyleSheet(f"""
+                #DashboardCard {{
+                    background-color: white;
+                    border: 1px solid #e5e8eb;
+                    border-top: 4px solid {new_color};
+                    border-radius: 16px;
+                    padding: 20px;
+                }}
+                #DashboardCard:hover {{
+                    border: 1px solid #3182f6;
+                    border-top: 4px solid #3182f6;
+                    background-color: #f9fafb;
+                }}
+                .CardTitle {{
+                    font-size: 16px;
+                    font-weight: bold;
+                    color: #191f28;
+                }}
+                .CardSub {{
+                    font-size: 13px;
+                    color: #8b95a1;
+                }}
+            """)
+            self.style().unpolish(self)
+            self.style().polish(self)
         
+        # Update icon if changed
         try:
-            self.icon_label.setPixmap(qta.icon(self.node.dashboard_icon).pixmap(24, 24))
+            ic_color = new_color
+            if ic_color == '#ffffff': ic_color = '#333d4b' # 흰색 배경 방지
+            self.icon_label.setPixmap(qta.icon(new_icon, color=ic_color).pixmap(24, 24))
         except Exception:
-            self.icon_label.setPixmap(qta.icon("fa5s.desktop").pixmap(24, 24))
+            self.icon_label.setPixmap(qta.icon("fa5s.desktop", color="#333d4b").pixmap(24, 24))
             
         self.title_label.setText(self.node.name)
         self.ip_label.setText(self.node.ip_address if self.node.ip_address else "N/A")

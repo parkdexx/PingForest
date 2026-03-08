@@ -149,7 +149,7 @@ class MainWindow(QMainWindow):
         self.icon_preview = QLabel()
         self.icon_preview.setFixedSize(24, 24)
         try:
-            self.icon_preview.setPixmap(qta.icon("fa5s.desktop").pixmap(24, 24))
+            self.icon_preview.setPixmap(qta.icon("fa5s.desktop", color="#333d4b").pixmap(24, 24))
         except Exception:
             pass
             
@@ -428,9 +428,10 @@ class MainWindow(QMainWindow):
         node_icon = getattr(node, 'dashboard_icon', 'fa5s.desktop')
         self.input_dashboard_icon.setText(node_icon)
         try:
-            self.icon_preview.setPixmap(qta.icon(node_icon).pixmap(24, 24))
+            ic_color = node_color if node_color != '#ffffff' else '#333d4b'
+            self.icon_preview.setPixmap(qta.icon(node_icon, color=ic_color).pixmap(24, 24))
         except Exception:
-            self.icon_preview.setPixmap(qta.icon("fa5s.desktop").pixmap(24, 24))
+            self.icon_preview.setPixmap(qta.icon("fa5s.desktop", color="#333d4b").pixmap(24, 24))
         
         # 상태 텍스트 
         if not node.ip_address:
@@ -550,8 +551,8 @@ class MainWindow(QMainWindow):
             try:
                 with open(file_path, 'w', encoding='utf-8') as f:
                     for line in node.logs:
-                        f.write(line + "\\n")
-                QMessageBox.information(self, "내보내기 완료", f"로그 내보내기를 완료했습니다.\\n{file_path}")
+                        f.write(line + "\n")
+                QMessageBox.information(self, "내보내기 완료", f"로그 내보내기를 완료했습니다.\n{file_path}")
             except Exception as e:
                 QMessageBox.warning(self, "내보내기 실패", f"로그 저장 중 오류가 발생했습니다: {e}")
 
@@ -567,6 +568,14 @@ class MainWindow(QMainWindow):
         if color.isValid():
             self.input_dashboard_color.setText(color.name())
             self.color_preview.setStyleSheet(f"background-color: {color.name()}; border: 1px solid #d1d6db; border-radius: 4px;")
+            
+            # 아이콘 미리보기 색상도 함께 업데이트
+            node_icon = self.input_dashboard_icon.text() or "fa5s.desktop"
+            try:
+                ic_color = color.name() if color.name() != '#ffffff' else '#333d4b'
+                self.icon_preview.setPixmap(qta.icon(node_icon, color=ic_color).pixmap(24, 24))
+            except Exception:
+                pass
 
     def on_select_icon(self):
         icons = [
@@ -593,7 +602,9 @@ class MainWindow(QMainWindow):
                 def set_icon(checked=False):
                     self.input_dashboard_icon.setText(name)
                     try:
-                        self.icon_preview.setPixmap(qta.icon(name).pixmap(24, 24))
+                        current_color = self.input_dashboard_color.text() or "#ffffff"
+                        ic_color = current_color if current_color != '#ffffff' else '#333d4b'
+                        self.icon_preview.setPixmap(qta.icon(name, color=ic_color).pixmap(24, 24))
                     except Exception:
                         pass
                     dialog.accept()
